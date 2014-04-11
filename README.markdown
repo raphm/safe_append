@@ -128,8 +128,7 @@ SOFTWARE. USE AT YOUR OWN RISK.
 
 ## Included Software
 
-SHA1 code comes from [Paul E.\
-Jones](http://www.packetizer.com/security/sha1/). The license file is
+SHA1 code comes from [Paul E. Jones](http://www.packetizer.com/security/sha1/). The license file is
 in the `include/` directory.
 
 SHA512 code comes from [Olivier Gay](http://www.ouah.org/ogay/sha2/).
