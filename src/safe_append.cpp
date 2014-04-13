@@ -6,31 +6,45 @@
 #include "safe_append.h"
 #include "safe_append_internals.h"
 
-inline bool system_is_big_endian()
-{
-    short word = 0x8421;
-    return ( (*(unsigned char *)(&word)) == 0x84 );
+
+
+
+template<typename T_iter>
+inline uint32_t extract_little_endian(T_iter & data) {
+    static_assert(std::is_same<typename std::iterator_traits<T_iter>::iterator_category,
+                  std::random_access_iterator_tag>::value,
+                  "argument must be a random access iterator");
+    return (data[0]<<0) | (data[1]<<8) | (data[2]<<16) | (data[3]<<24);
 }
 
-inline uint32_t swap_endian (uint32_t n)
-{
-    return (((n&0x000000FF)<<24)+((n&0x0000FF00)<<8)+((n&0x00FF0000)>>8)+((n&0xFF000000)>>24));
+template<typename T_iter>
+inline uint32_t extract_big_endian(T_iter & data) {
+    static_assert(std::is_same<typename std::iterator_traits<T_iter>::iterator_category,
+                  std::random_access_iterator_tag>::value,
+                  "argument must be a random access iterator");
+    return (data[3]<<0) | (data[2]<<8) | (data[1]<<16) | (data[0]<<24);
 }
 
-inline uint32_t uint_native_to_be(uint32_t n) {
-    if(system_is_big_endian()) {
-        return n;
-    } else {
-        return swap_endian(n);
-    }
+template<typename T_iter>
+inline void encode_little_endian(T_iter const & data, uint32_t value) {
+    static_assert(std::is_same<typename std::iterator_traits<T_iter>::iterator_category,
+                  std::random_access_iterator_tag>::value,
+                  "argument must be a random access iterator");
+    data[3]=(byte)((0xFF000000&value)>>24);
+    data[2]=(byte)((0x00FF0000&value)>>16);
+    data[1]=(byte)((0x0000FF00&value)>>8);
+    data[0]=(byte)((0x000000FF&value)>>0);
 }
 
-inline uint32_t uint_be_to_native(uint32_t n) {
-    if(system_is_big_endian()) {
-        return n;
-    } else {
-        return swap_endian(n);
-    }
+template<typename T_iter>
+inline void encode_big_endian(T_iter const & data, uint32_t value) {
+    static_assert(std::is_same<typename std::iterator_traits<T_iter>::iterator_category,
+                  std::random_access_iterator_tag>::value,
+                  "argument must be a random access iterator");
+    data[0]=(byte)((0xFF000000&value)>>24);
+    data[1]=(byte)((0x00FF0000&value)>>16);
+    data[2]=(byte)((0x0000FF00&value)>>8);
+    data[3]=(byte)((0x000000FF&value)>>0);
 }
 
 inline char nibble_to_hex(byte b) {
@@ -167,18 +181,21 @@ std::array<byte, SHA1::DIGEST_SIZE> sha1(std::vector<byte> const & input)
     typedef std::array<byte, SHA1::DIGEST_SIZE>          uchar_sha_array;
     
     SHA1 sha1;
+    
+    uint_sha_array   digest_uint;
     uchar_sha_array  digest_byte;
     
     sha1.Input( input.data(), input.size() );
+
+    sha1.Result(digest_uint.data());
     
-    sha1.Result(reinterpret_cast<unsigned int *>(digest_byte.data()));
+    uchar_sha_array::iterator uchar_iterator = digest_byte.begin();
     
-    if(!system_is_big_endian()) {
-        for(uint_sha_array::iterator it = reinterpret_cast<uint_sha_array::iterator>(digest_byte.begin()) ;
-            it < reinterpret_cast<uint_sha_array::iterator>(digest_byte.end()) ;
-            it+=1 ) {
-            *it = swap_endian(*it);
-        }
+    for(unsigned int ui : digest_uint) {
+        
+        encode_big_endian(uchar_iterator, ui);
+        uchar_iterator+=(sizeof(uint32_t));
+        
     }
     
     return digest_byte;
@@ -262,10 +279,18 @@ bool create_append_journal(std::string const & filepath) {
     if(!file_exists(filepath)) {
         return false;
     }
-    int curlen = uint_native_to_be(flen(filepath));
     std::vector<byte> bytes;
-    bytes.resize(sizeof(curlen));
-    std::copy(reinterpret_cast<byte *>(&curlen), reinterpret_cast<byte *>(&curlen+sizeof(curlen)), bytes.begin());
+    int curlen = flen(filepath);
+    if(curlen<0) return false;
+    bytes.resize(sizeof(uint32_t));
+    
+    //curlen = uint_native_to_be(flen(filepath));
+    //bytes.resize(sizeof(curlen));
+    //std::copy(reinterpret_cast<byte *>(&curlen), reinterpret_cast<byte *>(&curlen+sizeof(curlen)), bytes.begin());
+    
+    std::vector<byte>::iterator it = bytes.begin();
+    encode_big_endian(it, (uint32_t)curlen);
+    
     return write_checksummed_file(journal_name(filepath), bytes);
 }
 
@@ -287,10 +312,8 @@ sa::status_value read_append_journal(std::string const & filepath, long & out_le
         return sa::dirty;
     }
     
-    uint32_t jrn_len = 0;
-    std::copy(content.begin(), content.end(), reinterpret_cast<byte *>(&jrn_len));
-    
-    out_length = uint_be_to_native(jrn_len);
+    std::vector<byte>::iterator it = content.begin();
+    out_length = extract_big_endian(it);
     
     return sa::hot;
 }
