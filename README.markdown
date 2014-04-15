@@ -72,7 +72,18 @@ the end of the file. If you really can't afford data corruption, then
 RAID, multiple storage servers, UPSs, and good journaling file systems
 are all things you should consider putting in place.
 
+## Requirements
+
+This library requires C++11.
+
+Also, you will need Boost. I'm sorry to include it for such a tiny
+library, but the thought of writing my own filesystem handling
+routines made me sad, especially in light of the fact that I will most
+likely be the only user of this code.
+
 ## Example usage
+
+0) `#include "safe_append.h"`
 
 1) Call `sa_start` with the name of the file:
 
