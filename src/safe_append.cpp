@@ -6,103 +6,6 @@
 #include "safe_append.h"
 #include "safe_append_internals.h"
 
-
-
-
-template<typename T_iter>
-inline uint32_t extract_little_endian(T_iter & data) {
-    static_assert(std::is_same<typename std::iterator_traits<T_iter>::iterator_category,
-                  std::random_access_iterator_tag>::value,
-                  "argument must be a random access iterator");
-    return (data[0]<<0) | (data[1]<<8) | (data[2]<<16) | (data[3]<<24);
-}
-
-template<typename T_iter>
-inline uint32_t extract_big_endian(T_iter & data) {
-    static_assert(std::is_same<typename std::iterator_traits<T_iter>::iterator_category,
-                  std::random_access_iterator_tag>::value,
-                  "argument must be a random access iterator");
-    return (data[3]<<0) | (data[2]<<8) | (data[1]<<16) | (data[0]<<24);
-}
-
-template<typename T_iter>
-inline void encode_little_endian(T_iter const & data, uint32_t value) {
-    static_assert(std::is_same<typename std::iterator_traits<T_iter>::iterator_category,
-                  std::random_access_iterator_tag>::value,
-                  "argument must be a random access iterator");
-    data[3]=(byte)((0xFF000000&value)>>24);
-    data[2]=(byte)((0x00FF0000&value)>>16);
-    data[1]=(byte)((0x0000FF00&value)>>8);
-    data[0]=(byte)((0x000000FF&value)>>0);
-}
-
-template<typename T_iter>
-inline void encode_big_endian(T_iter const & data, uint32_t value) {
-    static_assert(std::is_same<typename std::iterator_traits<T_iter>::iterator_category,
-                  std::random_access_iterator_tag>::value,
-                  "argument must be a random access iterator");
-    data[0]=(byte)((0xFF000000&value)>>24);
-    data[1]=(byte)((0x00FF0000&value)>>16);
-    data[2]=(byte)((0x0000FF00&value)>>8);
-    data[3]=(byte)((0x000000FF&value)>>0);
-}
-
-inline char nibble_to_hex(byte b) {
-    b&=0x0F;
-    if(b<10) {
-        return '0'+b;
-    } else {
-        return 'a'+(b-10);
-    }
-}
-
-inline char hinibble(byte b) { return nibble_to_hex(((b&0xF0)>>4)); }
-inline char lonibble(byte b) { return nibble_to_hex(b); }
-
-std::string bytes_to_hex(std::vector<byte> const & bytes) {
-    std::string hexstr;
-    
-    hexstr.resize(bytes.size()*2);
-    
-    for(int i=0; i<bytes.size(); i+=1) {
-        hexstr[(i*2)]=hinibble(bytes[i]);
-        hexstr[(i*2)+1]=lonibble(bytes[i]);
-    }
-    
-    return hexstr;
-}
-
-inline byte hex_to_nibble(char c) {
-    if('0' <= c && c <= '9') {
-        return (c-'0');
-    } else if('a' <= c && c <= 'f') {
-        return (c-'a')+10;
-    } else if('A' <= c && c <= 'F') {
-        return (c-'A')+10;
-    } else {
-        return 0;
-    }
-}
-
-inline byte hex_to_byte(char hinibble, char lonibble) {
-    byte b = hex_to_nibble(lonibble);
-    b |= (0xF0 & (hex_to_nibble(hinibble))<<4);
-    return b;
-}
-
-std::vector<byte> hex_to_bytes(std::string const & str) {
-    std::vector<byte> data;
-    data.resize(str.length()/2);
-    for(int i=0;i<str.length();i+=2) {
-        data[i/2]=(byte)hex_to_byte(str[i], str[i+1]);
-    }
-    return data;
-}
-
-bool bytes_equal(std::vector<byte> const & b1, std::vector<byte> const & b2) {
-    return std::equal(b1.begin(), b1.end(), b2.begin());
-}
-
 bool mk_dir(std::string const & dirname) {
     boost::system::error_code sec;
     bool success = boost::filesystem::create_directory(boost::filesystem::path(dirname), sec);
@@ -147,22 +50,6 @@ bool delete_file(std::string const & filepath) {
     return success && boost::system::errc::success == sec.value();
 }
 
-bool splatfile(std::string const & filepath, std::string const & new_contents, bool append) {
-    std::ofstream::openmode flags;
-    flags = std::ios_base::binary | std::ios_base::out | std::ios_base::trunc;
-    if(append) {
-        flags = std::ios_base::binary | std::ios_base::out | std::ios_base::app;
-    }
-    std::ofstream f(filepath, flags);
-    if(f.is_open()) {
-        std::vector<byte> bytes = as_vec(new_contents);
-        f.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
-        f.flush();
-        f.close();
-        return true;
-    }
-    return false;
-}
 
 long flen(std::string const & filepath) {
     boost::system::error_code sec;
@@ -174,48 +61,6 @@ long flen(std::string const & filepath) {
     }
 }
 
-std::array<byte, SHA1::DIGEST_SIZE> sha1(std::vector<byte> const & input)
-{
-    
-    typedef std::array<unsigned int, 5>                  uint_sha_array;
-    typedef std::array<byte, SHA1::DIGEST_SIZE>          uchar_sha_array;
-    
-    SHA1 sha1;
-    
-    uint_sha_array   digest_uint;
-    uchar_sha_array  digest_byte;
-    
-    sha1.Input( input.data(), input.size() );
-
-    sha1.Result(digest_uint.data());
-    
-    uchar_sha_array::iterator uchar_iterator = digest_byte.begin();
-    
-    for(unsigned int ui : digest_uint) {
-        
-        encode_big_endian(uchar_iterator, ui);
-        uchar_iterator+=(sizeof(uint32_t));
-        
-    }
-    
-    return digest_byte;
-}
-
-std::array<byte, SHA512::DIGEST_SIZE>  sha512(std::vector<byte> const & input)
-{
-    
-    std::array<byte, SHA512::DIGEST_SIZE>  digest;
-    
-    std::fill(digest.begin(), digest.end(), 0);
-    
-    SHA512 ctx = SHA512();
-    ctx.init();
-    ctx.update((unsigned char*)input.data(), input.size());
-    ctx.final(digest.data());
-    
-    return digest;
-}
-
 /**
  * Write (or overwrite, if file fname exists) the bytes to file fname,
  * preceded by the sha512 checksum of the bytes. Provides a reader a way
@@ -225,7 +70,7 @@ std::array<byte, SHA512::DIGEST_SIZE>  sha512(std::vector<byte> const & input)
 bool write_checksummed_file(std::string const & filename, std::vector<byte> const & bytes) {
     std::ofstream f(filename, std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
     if(f.is_open()) {
-        std::vector<byte> hashvec = as_vec(sha512(bytes));
+        auto hashvec = sha512(bytes);
         f.write(reinterpret_cast<const char *>(hashvec.data()), hashvec.size());
         f.flush();
         f.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
@@ -260,7 +105,7 @@ std::tuple<bool, std::vector<byte>, std::vector<byte>> read_checksummed_file(std
             if(f.fail()) {
                 std::get<0>(rv)=false;
             } else {
-                std::get<0>(rv)=bytes_equal(as_vec(sha512(std::get<2>(rv))), std::get<1>(rv));
+                std::get<0>(rv)=bytes_equal(sha512(std::get<2>(rv)), std::get<1>(rv));
             }
             f.close();
         }
@@ -270,9 +115,12 @@ std::tuple<bool, std::vector<byte>, std::vector<byte>> read_checksummed_file(std
 
 std::string journal_name(std::string const & filepath) {
     std::string const fname = get_name(filepath);
-    std::string const fpath = get_path(filepath);
-    std::string const journal_name("j_" + bytes_to_hex(as_vec(sha1(as_vec(fname))))+".jrn");
-    return make_path(fpath, journal_name);
+    std::string journal_name("j_");
+    std::array<byte, SHA1::DIGEST_SIZE> hash = sha1<std::string>(fname);
+    std::back_insert_iterator<std::string> it = std::back_inserter(journal_name);
+    bytes_to_hex(hash.begin(), hash.end(), it);
+    journal_name+=".jrn";
+    return make_path(get_path(filepath), journal_name);
 }
 
 bool create_append_journal(std::string const & filepath) {
@@ -284,9 +132,8 @@ bool create_append_journal(std::string const & filepath) {
     if(curlen<0) return false;
     bytes.resize(sizeof(uint32_t));
     
-    //curlen = uint_native_to_be(flen(filepath));
-    //bytes.resize(sizeof(curlen));
-    //std::copy(reinterpret_cast<byte *>(&curlen), reinterpret_cast<byte *>(&curlen+sizeof(curlen)), bytes.begin());
+    // The only data we are writing for now is the length of the file to be journaled.
+    // This may (probably will) expand in the future.
     
     std::vector<byte>::iterator it = bytes.begin();
     encode_big_endian(it, (uint32_t)curlen);

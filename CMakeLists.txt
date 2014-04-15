@@ -1,10 +1,9 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
-if(APPLE)
-endif(APPLE)
 
 IF(APPLE)
         option(USE_CLANG "Build with clang" ON) # ON is the default
 
+	SET( CMAKE_C_COMPILER="/usr/bin/clang" )
         SET( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -stdlib=libc++" )
         SET( CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++" )
         SET( CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++" )

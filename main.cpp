@@ -48,7 +48,7 @@ BOOST_AUTO_TEST_CASE( sha1_test_cases )
         
         BOOST_CHECK(bytes_equal(uctest, lctest));
         
-        std::vector<byte> hashvec = as_vec(sha1(as_vec(input)));
+        auto hashvec = sha1<std::string>(input);
         
         BOOST_CHECK(bytes_equal(lctest, hashvec));
         
@@ -67,7 +67,7 @@ BOOST_AUTO_TEST_CASE( sha1_test_cases )
         
         BOOST_CHECK(bytes_equal(uctest, lctest));
         
-        std::vector<byte> hashvec = as_vec(sha1(as_vec(input)));
+        auto hashvec = sha1<std::string>(input);
         
         BOOST_CHECK(bytes_equal(lctest, hashvec));
         
@@ -99,7 +99,7 @@ BOOST_AUTO_TEST_CASE( sha512_test_cases ) {
         
         BOOST_CHECK(bytes_equal(uctest, lctest));
         
-        std::vector<byte> hashvec = as_vec(sha512(as_vec(input)));
+        auto hashvec = sha512<std::string>(input);
         
         BOOST_CHECK(bytes_equal(lctest, hashvec));
         
@@ -124,7 +124,7 @@ BOOST_AUTO_TEST_CASE( sha512_test_cases ) {
         
         BOOST_CHECK(bytes_equal(uctest, lctest));
         
-        std::vector<byte> hashvec = as_vec(sha512(as_vec(input)));
+        auto hashvec = sha512<std::string>(input);
         
         BOOST_CHECK(bytes_equal(lctest, hashvec));
         
@@ -138,8 +138,12 @@ BOOST_AUTO_TEST_CASE( checksummed_file_tests )
 {
     mk_dir("test/");
     
-    std::vector<byte> test_bytes = as_vec(std::string("This is a test of checksumming."));
-    std::vector<byte> master_cksum = as_vec(sha512(test_bytes));
+    std::string s("This is a test of checksumming.");
+    std::vector<byte> test_bytes;
+    test_bytes.resize(s.length());
+    std::copy(s.begin(), s.end(), test_bytes.begin());
+
+    auto master_cksum = sha512(test_bytes);
     
     std::string test_file = make_path("test", "foo.txt");
     
@@ -172,7 +176,12 @@ BOOST_AUTO_TEST_CASE( journal_name_tests )
     
     std::string jrn_name = journal_name(make_path("/tmp/foo", input));
     
-    BOOST_CHECK_EQUAL("/tmp/foo/j_"+bytes_to_hex(lctest)+".jrn", jrn_name);
+    std::string test_name("/tmp/foo/j_");
+    auto it = std::back_inserter(test_name);
+    bytes_to_hex(lctest.begin(), lctest.end(), it);
+    test_name += ".jrn";
+    
+    BOOST_CHECK_EQUAL(test_name, jrn_name);
     
     BOOST_CHECK_EQUAL(journal_name("/tmp/foo/baz.txt"), "/tmp/foo/j_3c6abbba2b09ba4928dcf77610a8124d79b184f7.jrn");
 }
@@ -183,7 +192,7 @@ BOOST_AUTO_TEST_CASE( journal_creation_tests )
     
     std::string fname("test/tmp.txt");
     
-    splatfile(fname, "append test\n");
+    splatfile<std::string>(fname, "append test\n");
     long orig_len = flen(fname);
     create_append_journal(fname);
     long journaled_len = 0;
@@ -192,7 +201,7 @@ BOOST_AUTO_TEST_CASE( journal_creation_tests )
     BOOST_CHECK_EQUAL(sa::hot, sa::status(fname));
     
     std::string additional_contents("line 2\n");
-    splatfile(fname, additional_contents, true);
+    splatfile<std::string>(fname, additional_contents, true);
     BOOST_CHECK_EQUAL(sa::hot, read_append_journal(fname, journaled_len));
     BOOST_CHECK_EQUAL(journaled_len, orig_len);
     BOOST_CHECK_NE(orig_len, flen(fname));
@@ -207,7 +216,7 @@ BOOST_AUTO_TEST_CASE( journal_creation_tests )
     BOOST_CHECK_EQUAL(orig_len+additional_contents.length(), journaled_len);
     BOOST_CHECK_EQUAL(sa::hot, sa::status(fname));
     
-    splatfile(journal_name(fname), "x");
+    splatfile<std::string>(journal_name(fname), "x");
     journaled_len = 0;
     BOOST_CHECK_EQUAL(sa::dirty, read_append_journal(fname, journaled_len));
     BOOST_CHECK_EQUAL(-1, journaled_len);
@@ -232,7 +241,7 @@ BOOST_AUTO_TEST_CASE( sa_function_tests )
     
     std::string fname("test/tmp.txt");
     
-    splatfile(fname, "append test\n");
+    splatfile<std::string>(fname, "append test\n");
     
     long orig_len = flen(fname);
     
@@ -244,7 +253,7 @@ BOOST_AUTO_TEST_CASE( sa_function_tests )
     
     BOOST_CHECK(!sa::start(fname));
     
-    splatfile(fname, "x", true);
+    splatfile<std::string>(fname, "x", true);
     
     BOOST_CHECK_EQUAL(sa::hot, sa::status(fname));
     
@@ -256,7 +265,7 @@ BOOST_AUTO_TEST_CASE( sa_function_tests )
     
     BOOST_CHECK_EQUAL(flen(fname), orig_len);
     
-    splatfile(journal_name(fname), "x", true);
+    splatfile<std::string>(journal_name(fname), "x", true);
     
     BOOST_CHECK_EQUAL(sa::dirty, sa::status(fname));
     
